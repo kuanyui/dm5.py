@@ -12,66 +12,64 @@
 import os, sys, re, subprocess
 import urllib.request
 import http.cookiejar
+import imghdr
+
 import execjs
 
 from bs4 import BeautifulSoup
 # From [2016-01-31 日 23:52]
 
 class Main(object):
-    chapterfunURIFormat = "http://www.dm5.com/m{chapterID}/chapterfun.ashx?cid={chapterID}&page={page}&key=&language=1&gtk=6"
     def __init__(self):
         self.cookie_jar = http.cookiejar.CookieJar()
         # build an EMPTY opener, with a cookie jar:
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookie_jar))
-        self.opener.addheaders = [('User-Agent', "Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0"),
-                                  #('Content-Type', 'application/x-www-form-urlencoded'),
-                                  #('X-Requested-With', 'XMLHttpRequest')
-                                  
-        ]
-    
+        self.opener.addheaders = [('User-Agent', "Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0")]
+        
     def inputChapterPageURL(self, chapterPageURL):
-        "ex: http://www.dm5.com/m204467/"
-        matched = re.match("http://www.dm5.com/m([0-9]+)/", pagePageURL)
-        if matched:
+        matched = re.match("http://www.dm5.com/m([0-9]+)/", chapterPageURL)
+        if not matched:
+            raise ValueError("{} is not a valid chapter page url!!".format(chapterPageURL))
+        else:
             chapterID = matched.group(1)
-            
-    def tryToGetChapterfunURIs(self, chapterID):
-        """m204467      -> 204467
-           rawChapterID    chapterID """
-        JSfunc1 = self.getChapterFunctionStr(chapterID, 1)
+            with self.opener.open(self.getRefereredRequestObj(chapterPageURL)) as response:
+                html = response.read().decode('utf-8')
+                soup = BeautifulSoup(html, "html.parser")
+                pageAmount = len(list(soup.find(id="pagelist").children)) - 1
+                for pageNum in range(1, pageAmount + 1):
+                    chapterFunc = self.getChapterFunctionStr(chapterID, pageNum)
+                    imageURI = self.getImageURI(chapterFunc)
+                    self.downloadImage(chapterID, imageURI, pageNum)
 
-    def getImageURI(self, chapterFunctionStr):
-        # return [imageURI, nextImageURI]
-        m = re.search("'([^']+)'.split\('\|'\)", chapterFunctionStr)
-        if m:
-            args = dict(enumerate(m.split('|')))
-            imageURIFormat = "{protocol}://{first}.{n1}-{n2}-{n3}-{n4}.{cdn}.{com}/{k}/{p}/{chID}/{imgName}.{imgFormat}?cid={chID}&key={key}"
-            imageURI = imageURIFormat.format(protocol=args[16],
-                                             first=args[15],
-                                             n1=args[20],
-                                             n2=args[19],
-                                             n3=args[10],
-                                             n4=args[11],
-                                             cdn=args[14],
-                                             com=args[12],
-                                             k=args[21],
-                                             p=args[26],
-                                             chID=args[3],
-                                             imgName=args[25],
-                                             imgFormat=args[4],
-                                             key=args[9],
-            )
-            
+    def getRefereredRequestObj(self, uri, chapterID=None, pageNum=None):
+        requestObj = urllib.request.Request(uri)
+        requestObj.add_header('Referer', 'http://www.dm5.com/m{}-p{}/'.format(chapterID, pageNum))
+        return requestObj
+
+    def downloadImage(self, chapterID, imageURI, pageNum):
+        req = self.getRefereredRequestObj(imageURI, chapterID, pageNum)
+        response = self.opener.open(req)
+        buffer = response.read()
+        ext = imghdr.what(None, h=buffer)
+        filename = "{:03d}.{}".format(pageNum, ext)
+        print("[Download Image]", filename)
+        with open(filename, 'wb') as f:
+            f.write(buffer)
     
-    def getChapterFunctionStr(self, chapterID, page):
-        req = urllib.request.Request(self.chapterfunURIFormat.format(chapterID=chapterID, page=page))
-        req.add_header('Referer', 'http://www.dm5.com/m{}/'.format(chapterID))
+    def getImageURI(self, jsChapterFunctionStr):
+        imageURIList = execjs.eval(jsChapterFunctionStr) # [imageURI, nextImageURI]
+        return imageURIList[0]
+    
+    def getChapterFunctionStr(self, chapterID, pageNum):
+        req = self.getRefereredRequestObj("http://www.dm5.com/m{chapterID}-p{pageNum}/chapterfun.ashx?cid={chapterID}&page={pageNum}&key=&language=1&gtk=6".format(chapterID=chapterID, pageNum=pageNum),
+                                          chapterID,
+                                          pageNum)
         response = self.opener.open(req)
         return response.read().decode('utf-8')
             
 
 main=Main()
-print(execjs.eval(main.getChapterFunctionStr("208342", 5)))
+main.inputChapterPageURL("http://www.dm5.com/m208342/")
 
         
 #if __name__ == "__main__":
