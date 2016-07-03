@@ -84,9 +84,13 @@ class FileManager(metaclass=Singleton):
         return os.path.join(self.getCurrentBookPath(), self.getZipFileName())
     
     def zipCurrentChapter(self):
-        subprocess.Popen(["zip", "-r", self.getZipFileName(), self.getCurrentChapterPath()],
+        zipFileName = self.getZipFileName()
+        subprocess.Popen(["zip",
+                          "--temp-path", self.getCurrentChapterPath(),
+                          "-r", zipFileName, self.getCurrentChapterPath()],
                          stdout=subprocess.PIPE).stdout.read()
-        os.rename(self.getZipFileName(), self.getCurrentBookPath())
+        # zip always place the output zipped file in `.` .... so move it
+        os.rename(zipFileName, os.path.join(self.getCurrentBookPath(), zipFileName))
 
 
 
