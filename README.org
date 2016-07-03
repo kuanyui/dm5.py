@@ -17,7 +17,7 @@ Change variable in file to customize:
 
 * Usage
 #+BEGIN_EXAMPLE
-$ ./dm5_downloader.py [URL]
+$ ./dm5.py [URL]
 #+END_EXAMPLE
 
 * License
