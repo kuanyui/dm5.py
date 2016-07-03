@@ -20,7 +20,6 @@ from bs4 import BeautifulSoup
 # From [2016-01-31 日 23:52]
 
 DOWNLOAD_DIRECTORY = "~/Downloaded Comics/"
-DELETE_ORIGINAL_DIRECTORY_AFTER_ZIP = True
 
 class Singleton(type):
     __instance = None

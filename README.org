@@ -1,0 +1,24 @@
+* README
+This is you know what.
+
+* Requirements
+- Python 3
+- BeautifulSoup4
+- PyExecJS
+
+#+BEGIN_EXAMPLE
+$ pip3 install BeautifulSoup4 PyExecJS
+#+END_EXAMPLE
+
+* Setting
+Change variable in file to customize:
+
+- =DOWNLOAD_DIRECTORY= : where to save your comics. Don't set to a directory containing any important files.
+
+* Usage
+#+BEGIN_EXAMPLE
+$ ./dm5_downloader.py [URL]
+#+END_EXAMPLE
+
+* License
+WTFPL 2.0
