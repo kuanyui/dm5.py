@@ -12,22 +12,160 @@
 import os, sys, re, subprocess
 import urllib.request
 import http.cookiejar
+#import http.cookies
 import imghdr
 
+import requests
 import execjs
 
 from bs4 import BeautifulSoup
 # From [2016-01-31 日 23:52]
 
-class Main(object):
+DOWNLOAD_DIRECTORY = "~/Downloaded Comics/"
+
+class Singleton(type):
+    __instance = None
+    def __call__(cls, *args, **kwargs):
+        if cls.__instance is None:
+            cls.__instance = super().__call__(*args, **kwargs)
+        return cls.__instance
+
+class FileManager(metaclass=Singleton):
+
     def __init__(self):
-        self.cookie_jar = http.cookiejar.CookieJar()
-        # build an EMPTY opener, with a cookie jar:
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookie_jar))
-        self.opener.addheaders = [('User-Agent', "Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0")]
+        self.chapterTitle = ""
+        self.bookTitle = ""
+        global DOWNLOAD_DIRECTORY
+        DOWNLOAD_DIRECTORY = os.path.expanduser(DOWNLOAD_DIRECTORY)
+    
+    def recursivelyMakeDirs(self, path):
+        fullpath = os.path.expanduser(path)
+        if not os.path.exists(fullpath):
+            os.makedirs(fullpath)
+
+    def getCurrentBookPath(self):
+        return os.path.join(DOWNLOAD_DIRECTORY, self.bookTitle)
+    
+    def getCurrentChapterPath(self):
+        return os.path.join(DOWNLOAD_DIRECTORY, self.bookTitle, self.chapterTitle)
+    
+    def setCurrentBook(self, bookTitle):
+        """Set bookTitle as current book, and create a directory for it."""
+        self.bookTitle = bookTitle
+        self.recursivelyMakeDirs(self.getCurrentBookPath())
+
+    def setCurrentChapter(self, chapterTitle):
+        """Set chapterTitle as current chapter, and create a directory for it.
+        setCurrentBook() is required first."""
+        self.chapterTitle = chapterTitle
+        self.recursivelyMakeDirs(self.getCurrentChapterPath())
+
+    def getImageFilePath(self, imageFileName):
+        return os.path.join(self.getCurrentChapterPath(), imageFileName)
+
+    def getImageFileAmountInCurrentChapterDirectory(self):
+        return len([x for x in os.listdir(self.getCurrentChapterPath()) if os.path.isfile(x)])
+    
+    def chapterExistsAndDownloadedCompletely(self, chapterTitle, totalPageAmount):
+        """setCurrentBook() is required first."""
+        self.chapterTitle = chapterTitle
+        if (os.path.exists(self.getCurrentChapterPath()) and
+            totalPageAmount == self.getImageFileAmountInCurrentChapterDirectory()):
+            return True
+        if os.path.exists(self.getZipFilePath()):
+            return True
+        return False
+
+            
+    def getZipFileName(self):
+        return "{}.zip".format(self.chapterTitle)
+
+    def getZipFilePath(self):
+        return os.path.join(self.getCurrentBookPath(), self.getZipFileName())
+    
+    def zipChapter(self):
+        subprocess.Popen(["zip", "-r", self.getZipFileName(), self.getCurrentChapterPath()],
+                         stdout=subprocess.PIPE).stdout.read()
+
+
+
+class CustomCookieHandler(urllib.request.BaseHandler):
+    """Add custom cookie to cookiejar for opener"""
+    def http_request(self, req):
+        custom_cookie = 'isAdult=1'
+        if not req.has_header("Cookie"):
+            req.add_unredirected_header('Cookie', custom_cookie)
+        else:
+            original_cookie = req.get_header('Cookie')
+            req.add_unredirected_header('Cookie', custom_cookie + '; ' + original_cookie)
+        return req
+
+
+class BaseDownloader:
+    cookie_jar = http.cookiejar.CookieJar()
+    #cookie = http.cookies.SimpleCookie()
+    #cookie["isAdult"] = "1"
+    #cookie_jar.set_cookie(cookie)
+    # build an EMPTY opener, with a cookie jar:
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar), CustomCookieHandler())
+    opener.addheaders = [('User-Agent', "Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0"),
+                         #("Set-Cookie", "isAdult=1") #useless
+    ]
+
+    
+class BookDownloader(BaseDownloader):
+
+    def __init__(self):
+        self.chapter_downloader = ChapterDownloader()
         
-    def inputChapterPageURL(self, chapterPageURL):
-        matched = re.match("http://www.dm5.com/m([0-9]+)/", chapterPageURL)
+    def downloadBook(self, bookURL):
+        title_chapterID_pageAmount = self.parseBook(bookURL)
+        FileManager().setCurrentBook(self.currentBookTitle)
+        print("[Book] Start to download book: {}".format(self.currentBookTitle))
+        for chapterTitle, chapterID, pageAmount in title_chapterID_pageAmount:
+            if FileManager().chapterExistsAndDownloadedCompletely(chapterTitle, pageAmount):
+                print('[Chapter] {} has been downloaded completely. Skip.'.format(chapterTitle))
+            else:
+                print('[Chapter] Start to download {} ({} pages)'.format(chapterTitle, pageAmount))
+                FileManager().setCurrentChapter(chapterTitle)
+                self.chapter_downloader.downloadChapter("http://www.dm5.com/{}/".format(chapterID))
+            
+    def parseBook(self, bookURL):
+        """return [(chapterTitle, chapterID) ...]"""
+        req = urllib.request.Request(bookURL)
+        print("Retrieveing & parsing book")
+        with self.opener.open(req) as response:           
+            html = response.read().decode('utf-8')
+            soup = BeautifulSoup(html, 'html.parser')
+            self.currentBookTitle=soup.find("title").string.split("_")[0]
+            uls = soup.find_all('ul', class_="nr6 lan2")
+            title_chapterID_pageAmount = []
+            for ul in uls:
+                for li in ul.children:
+                    a = li.find('a')
+                    if (type(a) != int) and (a.get("class")): # <a> is a Python dict
+                        _pageAmountString = li.contents[1]
+                        pageAmount = int(re.findall("\d+", _pageAmountString)[0])
+                        title = self.formatChapterNumber(a['title'])
+                        title = re.sub("{} ?".format(self.currentBookTitle), "", title)
+                        chapterID = a['href'][1:]
+                        title_chapterID_pageAmount.append((title, chapterID, pageAmount))
+            print("Found {} chapters in {}".format(len(title_chapterID_pageAmount), self.currentBookTitle))
+        return title_chapterID_pageAmount
+
+    def formatChapterNumber(self, title):
+        """第3卷 --> 第003卷"""
+        m = re.search(r"(\d+)", title)
+        if not m:
+            return title
+        else:
+           ddd = "{:03d}".format(int(m.group(1)))
+           return re.sub(r"\d+", ddd, title)
+            
+            
+class ChapterDownloader(BaseDownloader):
+    def downloadChapter(self, chapterPageURL):
+        matched = re.match("http://www.dm5.com/m(\d+)/", chapterPageURL)
         if not matched:
             raise ValueError("{} is not a valid chapter page url!!".format(chapterPageURL))
         else:
@@ -51,9 +189,10 @@ class Main(object):
         response = self.opener.open(req)
         buffer = response.read()
         ext = imghdr.what(None, h=buffer)
-        filename = "{:03d}.{}".format(pageNum, ext)
-        print("[Download Image]", filename)
-        with open(filename, 'wb') as f:
+        fileName = "{:03d}.{}".format(pageNum, ext)
+        filePath = FileManager().getImageFilePath(fileName) # Get full file path
+        print("[Download Image]", fileName)
+        with open(filePath, 'wb') as f:
             f.write(buffer)
     
     def getImageURI(self, jsChapterFunctionStr):
@@ -68,12 +207,14 @@ class Main(object):
         return response.read().decode('utf-8')
             
 
-main=Main()
-main.inputChapterPageURL("http://www.dm5.com/m208342/")
+book_downloader = BookDownloader()
+book_downloader.downloadBook("http://www.dm5.com/manhua-youlita/")
+#book_downloader.downloadBook("http://www.dm5.com/manhua-shishangzuiqiangdizijianyi/")
+#resp = requests.get("http://www.dm5.com/manhua-shishangzuiqiangdizijianyi/")
+#print(resp.text)
 
-        
 #if __name__ == "__main__":
-#    main = Main()
+#    main = ChapterDownloader()
 #    if len(sys.argv) > 1:
 #        main.get(sys.argv[1])
 #    else:
