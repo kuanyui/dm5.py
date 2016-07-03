@@ -6,7 +6,7 @@
 # Requirement:
 # $ pip3 install BeautifulSoup4 PyExecJS
 # License: WTFPL 1.0
-# Author: kuanyui
+# Author: ono hiroko
 # ======================================================
 
 import os, re, sys, subprocess
@@ -14,7 +14,6 @@ import urllib.request
 import http.cookiejar
 import imghdr
 
-import requests
 import execjs
 
 from bs4 import BeautifulSoup
@@ -48,6 +47,9 @@ class FileManager(metaclass=Singleton):
     
     def getCurrentChapterPath(self):
         return os.path.join(DOWNLOAD_DIRECTORY, self.bookTitle, self.chapterTitle)
+
+    def getCurrentBookTitle(self):
+        return self.bookTitle
     
     def setCurrentBook(self, bookTitle):
         """Set bookTitle as current book, and create a directory for it."""
@@ -126,8 +128,7 @@ class BookDownloader(BaseDownloader):
     def downloadBook(self, bookURL):
         title_chapterID_pageAmount = self.parseBook(bookURL)
         title_chapterID_pageAmount.reverse()  # Download from 001, 002, 003...
-        FileManager().setCurrentBook(self.currentBookTitle)
-        print("[Book] Start to download book: {}".format(self.currentBookTitle))
+        print("[Book] Start to download book: {}".format(FileManager().getCurrentBookTitle()))
         for chapterTitle, chapterID, pageAmount in title_chapterID_pageAmount:
             FileManager().setCurrentChapter(chapterTitle)
             if FileManager().chapterExistsAndDownloadedCompletely(chapterTitle, pageAmount):
@@ -144,7 +145,8 @@ class BookDownloader(BaseDownloader):
         with self.opener.open(req) as response:           
             html = response.read().decode('utf-8')
             soup = BeautifulSoup(html, 'html.parser')
-            self.currentBookTitle=soup.find("title").string.split("_")[0]
+            bookTitle=soup.find("title").string.split("_")[0]
+            FileManager().setCurrentBook(bookTitle)
             uls = soup.find_all('ul', class_="nr6 lan2")
             title_chapterID_pageAmount = []
             for ul in uls:
@@ -154,10 +156,10 @@ class BookDownloader(BaseDownloader):
                         _pageAmountString = li.contents[1]
                         pageAmount = int(re.findall("\d+", _pageAmountString)[0])
                         title = self.formatChapterNumber(a['title'])
-                        title = re.sub("{} ?".format(self.currentBookTitle), "", title)
+                        title = re.sub("{} ?".format(bookTitle), "", title)
                         chapterID = a['href'][1:]
                         title_chapterID_pageAmount.append((title, chapterID, pageAmount))
-            print("Found {} chapters in {}".format(len(title_chapterID_pageAmount), self.currentBookTitle))
+            print("Found {} chapters in {}".format(len(title_chapterID_pageAmount), bookTitle))
         return title_chapterID_pageAmount
 
     def formatChapterNumber(self, title):
