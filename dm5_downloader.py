@@ -64,10 +64,10 @@ class FileManager(metaclass=Singleton):
         return os.path.join(self.getCurrentChapterPath(), imageFileName)
 
     def getImageFileAmountInCurrentChapterDirectory(self):
-        return len([x for x in os.listdir(self.getCurrentChapterPath()) if os.path.isfile(x)])
+        return len(os.listdir(self.getCurrentChapterPath()))
     
     def chapterExistsAndDownloadedCompletely(self, chapterTitle, totalPageAmount):
-        """setCurrentBook() is required first."""
+        """setCurrentBook() and setCurrentChapter() is required first."""
         self.chapterTitle = chapterTitle
         if (os.path.exists(self.getCurrentChapterPath()) and
             totalPageAmount == self.getImageFileAmountInCurrentChapterDirectory()):
@@ -123,11 +123,11 @@ class BookDownloader(BaseDownloader):
         FileManager().setCurrentBook(self.currentBookTitle)
         print("[Book] Start to download book: {}".format(self.currentBookTitle))
         for chapterTitle, chapterID, pageAmount in title_chapterID_pageAmount:
+            FileManager().setCurrentChapter(chapterTitle)
             if FileManager().chapterExistsAndDownloadedCompletely(chapterTitle, pageAmount):
                 print('[Chapter] {} has been downloaded completely. Skip.'.format(chapterTitle))
             else:
                 print('[Chapter] Start to download {} ({} pages)'.format(chapterTitle, pageAmount))
-                FileManager().setCurrentChapter(chapterTitle)
                 self.chapter_downloader.downloadChapter("http://www.dm5.com/{}/".format(chapterID))
             
     def parseBook(self, bookURL):
