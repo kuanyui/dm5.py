@@ -4,15 +4,14 @@
 # ======================================================#
 # Downloader for dm5
 # Requirement:
-# $ pip3 install BeautifulSoup4
+# $ pip3 install BeautifulSoup4 PyExecJS
 # License: WTFPL 1.0
 # Author: kuanyui
 # ======================================================
 
-import os, sys, re, subprocess
+import os, re, sys, subprocess
 import urllib.request
 import http.cookiejar
-#import http.cookies
 import imghdr
 
 import requests
@@ -22,6 +21,7 @@ from bs4 import BeautifulSoup
 # From [2016-01-31 日 23:52]
 
 DOWNLOAD_DIRECTORY = "~/Downloaded Comics/"
+DELETE_ORIGINAL_DIRECTORY_AFTER_ZIP = True
 
 class Singleton(type):
     __instance = None
@@ -83,9 +83,10 @@ class FileManager(metaclass=Singleton):
     def getZipFilePath(self):
         return os.path.join(self.getCurrentBookPath(), self.getZipFileName())
     
-    def zipChapter(self):
+    def zipCurrentChapter(self):
         subprocess.Popen(["zip", "-r", self.getZipFileName(), self.getCurrentChapterPath()],
                          stdout=subprocess.PIPE).stdout.read()
+        os.rename(self.getZipFileName(), self.getCurrentBookPath())
 
 
 
@@ -120,6 +121,7 @@ class BookDownloader(BaseDownloader):
         
     def downloadBook(self, bookURL):
         title_chapterID_pageAmount = self.parseBook(bookURL)
+        title_chapterID_pageAmount.reverse()  # Download from 001, 002, 003...
         FileManager().setCurrentBook(self.currentBookTitle)
         print("[Book] Start to download book: {}".format(self.currentBookTitle))
         for chapterTitle, chapterID, pageAmount in title_chapterID_pageAmount:
@@ -129,6 +131,7 @@ class BookDownloader(BaseDownloader):
             else:
                 print('[Chapter] Start to download {} ({} pages)'.format(chapterTitle, pageAmount))
                 self.chapter_downloader.downloadChapter("http://www.dm5.com/{}/".format(chapterID))
+                FileManager().zipCurrentChapter()
             
     def parseBook(self, bookURL):
         """return [(chapterTitle, chapterID) ...]"""
@@ -207,16 +210,11 @@ class ChapterDownloader(BaseDownloader):
         return response.read().decode('utf-8')
             
 
-book_downloader = BookDownloader()
-book_downloader.downloadBook("http://www.dm5.com/manhua-youlita/")
-#book_downloader.downloadBook("http://www.dm5.com/manhua-shishangzuiqiangdizijianyi/")
-#resp = requests.get("http://www.dm5.com/manhua-shishangzuiqiangdizijianyi/")
-#print(resp.text)
+    
+if __name__ == "__main__":
+    book_downloader = BookDownloader()
+    if len(sys.argv) > 1:
+        book_downloader.downloadBook(sys.argv[1])
+    else:
+        print("please input a dm5 book link.")
 
-#if __name__ == "__main__":
-#    main = ChapterDownloader()
-#    if len(sys.argv) > 1:
-#        main.get(sys.argv[1])
-#    else:
-#        print("please input a nhentai url.")
-#
