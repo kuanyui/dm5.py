@@ -11,6 +11,7 @@
 
 import os, re, sys, subprocess
 import urllib.request
+import urllib.parse
 import http.cookiejar
 import imghdr
 
@@ -205,7 +206,7 @@ class ChapterDownloader(BaseDownloader):
     
     def getImageURI(self, jsChapterFunctionStr):
         imageURIList = execjs.eval(jsChapterFunctionStr) # [imageURI, nextImageURI]
-        return imageURIList[0]
+        return urllib.parse.quote(imageURIList[0], safe=":/")
     
     def getChapterFunctionStr(self, chapterID, pageNum):
         req = self.getRefereredRequestObj("http://www.dm5.com/m{chapterID}-p{pageNum}/chapterfun.ashx?cid={chapterID}&page={pageNum}&key=&language=1&gtk=6".format(chapterID=chapterID, pageNum=pageNum),
