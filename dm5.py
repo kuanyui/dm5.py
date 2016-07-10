@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 # From [2016-01-31 日 23:52]
 
 DOWNLOAD_DIRECTORY = "~/Downloaded Comics/"
+DELETE_ORIGINAL_DIR_AFTER_DONE = True
 
 class Singleton(type):
     __instance = None
@@ -87,12 +88,15 @@ class FileManager(metaclass=Singleton):
     
     def zipCurrentChapter(self):
         zipFileName = self.getZipFileName()
+        chapterPath = self.getCurrentChapterPath()
         subprocess.Popen(["zip",
-                          "--temp-path", self.getCurrentChapterPath(),
-                          "-r", zipFileName, self.getCurrentChapterPath()],
+                          "--temp-path", chapterPath,
+                          "-r", zipFileName, chapterPath],
                          stdout=subprocess.PIPE).stdout.read()
         # zip always place the output zipped file in `.` .... so move it
         os.rename(zipFileName, os.path.join(self.getCurrentBookPath(), zipFileName))
+        if DELETE_ORIGINAL_DIR_AFTER_DONE:
+            os.remove(chapterPath)
 
 
 
@@ -134,7 +138,7 @@ class BookDownloader(BaseDownloader):
             if FileManager().chapterExistsAndDownloadedCompletely(chapterTitle, pageAmount):
                 print('[Chapter] {} has been downloaded completely. Skip.'.format(chapterTitle))
             else:
-                print('[Chapter] Start to download {} ({} pages)'.format(chapterTitle, pageAmount))
+                print('[Chapter] Start to download {} ({} pages) from {}'.format(chapterTitle, pageAmount, FileManager().getCurrentBookTitle()))
                 self.chapter_downloader.downloadChapter("http://www.dm5.com/{}/".format(chapterID))
                 FileManager().zipCurrentChapter()
             
