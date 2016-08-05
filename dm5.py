@@ -14,6 +14,7 @@ import urllib.request
 import urllib.parse
 import http.cookiejar
 import imghdr
+import shutil
 
 import execjs
 
@@ -96,7 +97,7 @@ class FileManager(metaclass=Singleton):
         # zip always place the output zipped file in `.` .... so move it
         os.rename(zipFileName, os.path.join(self.getCurrentBookPath(), zipFileName))
         if DELETE_ORIGINAL_DIR_AFTER_DONE:
-            os.remove(chapterPath)
+            shutil.rmtree(chapterPath)
 
 
 
