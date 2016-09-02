@@ -186,12 +186,16 @@ class ChapterDownloader(BaseDownloader):
             chapterID = matched.group(1)
             with self.opener.open(self.getRefereredRequestObj(chapterPageURL)) as response:
                 html = response.read().decode('utf-8')
-                soup = BeautifulSoup(html, "html.parser")
-                pageAmount = len(list(soup.find(id="pagelist").children)) - 1
-                for pageNum in range(1, pageAmount + 1):
-                    chapterFunc = self.getChapterFunctionStr(chapterID, pageNum)
-                    imageURI = self.getImageURI(chapterFunc)
-                    self.downloadImage(chapterID, imageURI, pageNum)
+                m = re.search(r'src="(https?://[^ ]+?/yb_tc.js)"', html)
+                if m:
+                    jsFileURL = m.group(1)
+                    print(jsFileURL) 
+                    jsCodeString = self.getJsCodeString(jsFileURL, chapterID, 1) #historic reas
+                    imageURIList = self.getImageURIList(jsCodeString)
+                    pageNum = 0
+                    for imageURI in imageURIList:
+                        pageNum += 1 
+                        self.downloadImage(chapterID, imageURI, pageNum)
 
     def getRefereredRequestObj(self, uri, chapterID=None, pageNum=None):
         requestObj = urllib.request.Request(uri)
@@ -209,14 +213,14 @@ class ChapterDownloader(BaseDownloader):
         with open(filePath, 'wb') as f:
             f.write(buffer)
     
-    def getImageURI(self, jsChapterFunctionStr):
-        imageURIList = execjs.eval(jsChapterFunctionStr) # [imageURI, nextImageURI]
+    def getImageURIList(self, jsCodeString):
+        print(jsCodeString)
+        imageURIList = execjs.eval(jsCodeString)
+        print("imageURIList", imageURIList)
         return urllib.parse.quote(imageURIList[0], safe=":/")
     
-    def getChapterFunctionStr(self, chapterID, pageNum):
-        req = self.getRefereredRequestObj("http://www.dm5.com/m{chapterID}-p{pageNum}/chapterfun.ashx?cid={chapterID}&page={pageNum}&key=&language=1&gtk=6".format(chapterID=chapterID, pageNum=pageNum),
-                                          chapterID,
-                                          pageNum)
+    def getJsCodeString(self, jsFileURL, chapterID, pageNum):
+        req = self.getRefereredRequestObj(jsFileURL, chapterID, pageNum)
         response = self.opener.open(req)
         return response.read().decode('utf-8')
             
