@@ -188,9 +188,9 @@ class ChapterDownloader(BaseDownloader):
                 html = response.read().decode('utf-8')
                 m = re.search(r'src="(https?://[^ ]+?/yb_tc.js)"', html)
                 if m:
-                    jsFileURL = m.group(1)
-                    print(jsFileURL) 
-                    jsCodeString = self.getJsCodeString(jsFileURL, chapterID, 1) #historic reas
+                    jsFileURIList = re.findall(r'"(http://[^ ]+?/[^ ]+?\.js)"', html)
+                    print(jsFileURIList) 
+                    jsCodeString = self.getJsCodeString(jsFileURIList, chapterID, 1) #historic reas
                     imageURIList = self.getImageURIList(jsCodeString)
                     pageNum = 0
                     for imageURI in imageURIList:
@@ -213,16 +213,20 @@ class ChapterDownloader(BaseDownloader):
         with open(filePath, 'wb') as f:
             f.write(buffer)
     
-    def getImageURIList(self, jsCodeString):
-        print(jsCodeString)
+    def getImageURIList(self, jsCodeString): 
         imageURIList = execjs.eval(jsCodeString)
         print("imageURIList", imageURIList)
         return urllib.parse.quote(imageURIList[0], safe=":/")
     
-    def getJsCodeString(self, jsFileURL, chapterID, pageNum):
-        req = self.getRefereredRequestObj(jsFileURL, chapterID, pageNum)
-        response = self.opener.open(req)
-        return response.read().decode('utf-8')
+    def getJsCodeString(self, jsFileURIList, chapterID, pageNum):
+        finalString = ""
+        for jsUri in jsFileURIList:
+            req = self.getRefereredRequestObj(jsUri, chapterID, pageNum)
+            response = self.opener.open(req)
+            finalString += response.read().decode('utf-8')
+            finalString += ';'
+            if jsUri.endswith('yb_tc.js'):
+                return finalString
             
 
     
